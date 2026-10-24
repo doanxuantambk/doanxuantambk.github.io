@@ -1,0 +1,1591 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Max & Win" />
+  <title>Max & Win's Super Learning World 🦖🐱⚽</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React & ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Babel Standalone -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Nunito', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+    .lego-brick {
+      box-shadow: inset 0 -4px 0 rgba(0,0,0,0.25), 0 4px 6px rgba(0,0,0,0.15);
+      position: relative;
+    }
+    .lego-brick::before {
+      content: '';
+      position: absolute;
+      top: -6px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 45%;
+      height: 6px;
+      background: inherit;
+      border-radius: 3px 3px 0 0;
+      filter: brightness(1.1);
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-6px); }
+    }
+    .animate-float {
+      animation: float 3s ease-in-out infinite;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-800 min-h-screen">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // ================== HELPER: VOICE & SOUND ==================
+    const speakText = (text, lang = 'en-US', rate = 0.9) => {
+      if (!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = lang;
+      utter.rate = rate;
+      utter.pitch = lang.startsWith('en') ? 1.1 : 1.0;
+      window.speechSynthesis.speak(utter);
+    };
+
+    const playEffect = (type) => {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        if (type === 'correct') {
+          osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+          osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1);
+          osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2);
+          gain.gain.setValueAtTime(0.2, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+          osc.start(ctx.currentTime);
+          osc.stop(ctx.currentTime + 0.45);
+        } else {
+          osc.frequency.setValueAtTime(220, ctx.currentTime);
+          osc.frequency.setValueAtTime(180, ctx.currentTime + 0.15);
+          gain.gain.setValueAtTime(0.2, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+          osc.start(ctx.currentTime);
+          osc.stop(ctx.currentTime + 0.35);
+        }
+      } catch (e) {}
+    };
+
+    // ================== DATA FOR MAX (GRADE 2 - CAMBRIDGE STARTERS & MOVERS) ==================
+    const MAX_VOCAB_LIST = [
+      { id: 1, word: 'DINOSAUR', level: 'Movers', emoji: '🦖', hintVi: 'Khủng long bạo chúa', sentence: 'The green dinosaur is very strong.' },
+      { id: 2, word: 'ROCKET', level: 'Starters', emoji: '🚀', hintVi: 'Tên lửa vũ trụ', sentence: 'Max flies to space in a big rocket.' },
+      { id: 3, word: 'FOOTBALL', level: 'Starters', emoji: '⚽', hintVi: 'Môn bóng đá', sentence: 'He plays football with his brother.' },
+      { id: 4, word: 'PUPPY', level: 'Movers', emoji: '🐶', hintVi: 'Chú cún con', sentence: 'The cute puppy likes running in the park.' },
+      { id: 5, word: 'KITTEN', level: 'Movers', emoji: '🐱', hintVi: 'Chú mèo con', sentence: 'Win has a little orange kitten.' },
+      { id: 6, word: 'PLANET', level: 'Movers', emoji: '🪐', hintVi: 'Hành tinh trong vũ trụ', sentence: 'Saturn is a beautiful planet with rings.' },
+      { id: 7, word: 'ROBOT', level: 'Starters', emoji: '🤖', hintVi: 'Người máy Lego', sentence: 'Max builds a cool robot with Lego bricks.' },
+      { id: 8, word: 'MONSTER', level: 'Starters', emoji: '👾', hintVi: 'Quái vật vui nhộn', sentence: 'Look! That purple monster has three eyes.' },
+      { id: 9, word: 'HELMET', level: 'Movers', emoji: '⛑️', hintVi: 'Mũ bảo hiểm phi hành gia', sentence: 'Always wear a helmet on your space trip.' },
+      { id: 10, word: 'DOLPHIN', level: 'Movers', emoji: '🐬', hintVi: 'Cá heo thông minh', sentence: 'A clever dolphin is jumping in the sea.' }
+    ];
+
+    const MAX_WRITING_PROMPTS = [
+      {
+        id: 1,
+        sceneEmoji: '🦖⚽🏟️',
+        title: 'Khủng Long Đá Bóng (Starters -> Movers)',
+        question: 'Look at the picture! What is the dinosaur doing?',
+        keywords: ['dinosaur', 'playing', 'football', 'park', 'happy'],
+        sampleStarter: 'The dinosaur is playing football.',
+        sampleMover: 'A big green dinosaur is happily playing football in the park.'
+      },
+      {
+        id: 2,
+        sceneEmoji: '🧑‍🚀🚀🪐',
+        title: 'Phi Hành Gia Max Khám Phá Vũ Trụ',
+        question: 'Where is the astronaut going and what can he see?',
+        keywords: ['astronaut', 'flying', 'rocket', 'planet', 'stars'],
+        sampleStarter: 'The astronaut is flying in a rocket.',
+        sampleMover: 'Brave Astronaut Max is flying a fast rocket to a red planet.'
+      },
+      {
+        id: 3,
+        sceneEmoji: '🐶🐱🛋️',
+        title: 'Chó Và Mèo Trên Ghế Sofa',
+        question: 'What are the dog and the cat doing in the living room?',
+        keywords: ['puppy', 'kitten', 'sleeping', 'sofa', 'cute'],
+        sampleStarter: 'The dog and the cat are sleeping on the sofa.',
+        sampleMover: 'A cute puppy and a small kitten are sleeping together on the blue sofa.'
+      },
+      {
+        id: 4,
+        sceneEmoji: '🧱🤖⚡',
+        title: 'Siêu Robot Lego Của Max',
+        question: 'Describe this cool Lego Robot! What can it do?',
+        keywords: ['robot', 'strong', 'jump', 'laser', 'red'],
+        sampleStarter: 'This is a strong red robot. It can jump.',
+        sampleMover: 'Max built a powerful red Lego robot because it can jump very high.'
+      }
+    ];
+
+    const MAX_LISTENING_QUIZ = [
+      {
+        id: 1,
+        audioText: 'Listen carefully Max! The green dinosaur is wearing a red superhero cape and playing football.',
+        question: 'Con khủng long trong câu vừa nghe đang làm gì?',
+        options: [
+          { text: '🦖⚽ Mặc áo choàng đỏ & đá bóng', correct: true },
+          { text: '🦖💤 Đang ngủ dưới gốc cây', correct: false },
+          { text: '🦖🍕 Đang ăn bánh pizza', correct: false }
+        ]
+      },
+      {
+        id: 2,
+        audioText: 'There are three rockets flying above the yellow planet, and one cute puppy is inside the biggest rocket.',
+        question: 'Có bao nhiêu tên lửa và ai ở trong tên lửa lớn nhất?',
+        options: [
+          { text: '🚀 2 tên lửa & 1 chú mèo', correct: false },
+          { text: '🚀🚀🚀 3 tên lửa & 1 chú cún con', correct: true },
+          { text: '🚀 5 tên lửa & 1 siêu nhân', correct: false }
+        ]
+      },
+      {
+        id: 3,
+        audioText: 'Max put his Lego robot next to the bookcase, between the football and the toy car.',
+        question: 'Robot Lego của Max được đặt ở đâu (Chuẩn Listening Part 1)?',
+        options: [
+          { text: 'Trên giường ngủ', correct: false },
+          { text: 'Cạnh tủ sách, ở giữa quả bóng và ô tô đồ chơi', correct: true },
+          { text: 'Ở dưới gầm bàn ăn', correct: false }
+        ]
+      }
+    ];
+
+    const REX_CONVERSATIONS = [
+      {
+        q: "Roar! Hello Max! I am Captain Rex 🦖. What is your favourite animal, and why do you like it?",
+        hint: "My favourite animal is the dinosaur / dog / cat because it is strong and cool!",
+        keywords: ['like', 'favourite', 'dinosaur', 'dog', 'cat', 'because', 'cool', 'strong', 'cute']
+      },
+      {
+        q: "Awesome job Max! Now tell me, what sport do you like playing after school?",
+        hint: "I like playing football and swimming!",
+        keywords: ['football', 'soccer', 'swim', 'play', 'sport', 'run', 'game']
+      },
+      {
+        q: "Super! Imagine we fly into space in a Lego rocket 🚀. What can you see in space?",
+        hint: "I can see big planets, bright stars, and the moon!",
+        keywords: ['planet', 'star', 'moon', 'sun', 'space', 'rocket', 'alien']
+      },
+      {
+        q: "Cambridge Shield Question 🛡️: Tell me 2 sentences about your little brother Win!",
+        hint: "My brother is Win. He is five years old and he loves cute cats!",
+        keywords: ['brother', 'win', 'five', 'cat', 'play', 'cute', 'happy']
+      }
+    ];
+
+    const MAX_MATH_LIST = [
+      { id: 1, q: '🦖 Khủng long T-Rex có 14 quả bóng năng lượng. T-Rex tặng cho Pikachu 6 quả, sau đó tìm thêm được 9 quả nữa. Hỏi T-Rex hiện có bao nhiêu quả bóng?', options: ['15 quả', '17 quả', '19 quả', '21 quả'], ans: '17 quả', exp: '14 - 6 = 8, sau đó 8 + 9 = 17 quả bóng!' },
+      { id: 2, q: '🚀 Quy luật Vũ Trụ: Tìm số tiếp theo trong dãy mã khóa tên lửa: 3, 7, 11, 15, 19, ...?', options: ['21', '22', '23', '25'], ans: '23', exp: 'Mỗi số đứng sau bằng số trước cộng thêm 4 (19 + 4 = 23)!' },
+      { id: 3, q: '🧱 Một hộp Lego có 3 ngăn. Mỗi ngăn có 8 mảnh ghép siêu nhân. Hỏi cả hộp có tất cả bao nhiêu mảnh ghép?', options: ['16 mảnh', '20 mảnh', '24 mảnh', '28 mảnh'], ans: '24 mảnh', exp: '8 + 8 + 8 = 24 (hoặc 8 x 3 = 24 mảnh ghép)!' },
+      { id: 4, q: '⚖️ Cân Thăng Bằng: 1 chú Chó 🐶 nặng bằng 2 chú Mèo 🐱. Biết 1 chú Mèo nặng 4 kg. Hỏi 1 chú Chó và 1 chú Mèo nặng tổng cộng bao nhiêu kg?', options: ['8 kg', '10 kg', '12 kg', '14 kg'], ans: '12 kg', exp: 'Chó nặng 4 + 4 = 8kg. Tổng Chó + Mèo = 8 + 4 = 12kg!' },
+      { id: 5, q: '⚽ Trong giải bóng đá Pokemon, đội của Max ghi được nhiều hơn đội Rocket 5 bàn. Biết đội Rocket ghi được 7 bàn. Hỏi cả hai đội ghi được tổng cộng bao nhiêu bàn thắng?', options: ['12 bàn', '17 bàn', '19 bàn', '21 bàn'], ans: '19 bàn', exp: 'Đội Max ghi: 7 + 5 = 12 bàn. Cả hai đội ghi: 12 + 7 = 19 bàn!' },
+      { id: 6, q: '🪐 Hình Học Không Gian: Một khối lập phương Lego có tất cả bao nhiêu mặt phẳng?', options: ['4 mặt', '6 mặt', '8 mặt', '12 mặt'], ans: '6 mặt', exp: 'Khối lập phương (như viên xúc xắc) có 6 mặt phẳng bằng nhau!' }
+    ];
+
+    const MAX_VIET_LIST = [
+      { id: 1, q: '✍️ Chọn từ viết ĐÚNG chính tả để điền vào câu: "Phi hành gia Max đang ...ẵn ...àng phóng tàu vũ trụ."', options: ['sẵn sàng', 'xẵn xàng', 'sẳn sàng', 'xẵn sàng'], ans: 'sẵn sàng', exp: '"Sẵn sàng" viết với hai chữ S!' },
+      { id: 2, q: '📚 Trong câu: "Chú khủng long xanh khổng lồ đang sút bóng rất mạnh", từ nào là TỪ CHỈ ĐẶC ĐIỂM?', options: ['khủng long, bóng', 'đang sút', 'xanh, khổng lồ, mạnh', 'Chú'], ans: 'xanh, khổng lồ, mạnh', exp: 'Từ chỉ đặc điểm cho biết màu sắc, hình dáng, tính chất (xanh, khổng lồ, mạnh).' },
+      { id: 3, q: '🧩 Sắp xếp các từ sau thành câu đúng: [trên sân cỏ / Hihi và Haha / đá bóng / cùng nhau]', options: ['Hihi và Haha cùng nhau đá bóng trên sân cỏ.', 'Trên sân cỏ đá bóng Hihi và Haha cùng nhau.', 'Đá bóng Hihi và Haha trên sân cỏ cùng nhau.'], ans: 'Hihi và Haha cùng nhau đá bóng trên sân cỏ.', exp: 'Cấu trúc câu Ai làm gì ở đâu rõ ràng, mạch lạc!' },
+      { id: 4, q: '🔍 Điền vào chỗ trống (ch hay tr): "Chú mèo con ...èo lên ...ên nóc tủ tìm cuộn len."', options: ['trèo - trên', 'chèo - trên', 'trèo - chên', 'chèo - chên'], ans: 'trèo - trên', exp: '"Trèo cây/trèo lên" và "ở trên" đều viết bằng TR!' },
+      { id: 5, q: '🌟 Câu "Chú cún con nhà em chạy nhanh như một siêu nhân!" thuộc kiểu câu gì lớp 2?', options: ['Ai là gì?', 'Ai làm gì?', 'Ai thế nào? (có hình ảnh so sánh)'], ans: 'Ai thế nào? (có hình ảnh so sánh)', exp: 'Miêu tả đặc điểm chạy nhanh của chú cún kèm từ so sánh "như".' },
+      { id: 6, q: '📖 Tìm từ trái nghĩa với từ "Dũng cảm" trong câu: "Siêu nhân Max rất dũng cảm bảo vệ Trái Đất."', options: ['Gan dạ', 'Nhút nhát', 'Mạnh mẽ', 'Thông minh'], ans: 'Nhút nhát', exp: '"Dũng cảm" trái nghĩa với "Nhút nhát"!' }
+    ];
+
+    // ================== DATA FOR WIN (5 YEARS OLD - PRESCHOOL) ==================
+    const WIN_VOCAB_TOUCH = [
+      { id: 1, word: 'Dinosaur', vi: 'Con khủng long', emoji: '🦖', choices: ['🦖', '🚗', '🍎'] },
+      { id: 2, word: 'Cute Cat', vi: 'Mèo con đáng yêu', emoji: '🐱', choices: ['🐶', '🐱', '🐸'] },
+      { id: 3, word: 'Puppy Dog', vi: 'Chú cún con', emoji: '🐶', choices: ['🐶', '🦁', '🐼'] },
+      { id: 4, word: 'Football', vi: 'Quả bóng đá', emoji: '⚽', choices: ['🎈', '⚽', '🍕'] },
+      { id: 5, word: 'Space Rocket', vi: 'Tên lửa vũ trụ', emoji: '🚀', choices: ['🚲', '⛵', '🚀'] },
+      { id: 6, word: 'Superhero', vi: 'Siêu nhân anh hùng', emoji: '🦸‍♂️', choices: ['🦸‍♂️', '⛄', '🌵'] }
+    ];
+
+    const WIN_SENTENCES_5YO = [
+      { id: 1, en: 'Hello! I am Win.', vi: 'Xin chào! Tớ là Win.', emoji: '👋😄', keywords: ['hello', 'win', 'am'] },
+      { id: 2, en: 'I am five years old.', vi: 'Tớ năm tuổi rồi.', emoji: '🖐️🎂', keywords: ['five', 'years', 'old'] },
+      { id: 3, en: 'I love my cute cat.', vi: 'Tớ yêu bạn mèo con đáng yêu.', emoji: '🐱❤️', keywords: ['love', 'cute', 'cat'] },
+      { id: 4, en: 'I like big dinosaurs.', vi: 'Tớ thích khủng long khổng lồ.', emoji: '🦖🌟', keywords: ['like', 'big', 'dinosaur'] },
+      { id: 5, en: 'I like playing football.', vi: 'Tớ thích chơi đá bóng.', emoji: '⚽🏃', keywords: ['like', 'playing', 'football'] },
+      { id: 6, en: 'It is a red rocket.', vi: 'Đó là một chiếc tên lửa màu đỏ.', emoji: '🚀🔴', keywords: ['red', 'rocket'] },
+      { id: 7, en: 'I see three puppies.', vi: 'Tớ nhìn thấy ba chú cún con.', emoji: '🐶🐶🐶', keywords: ['three', 'puppies', 'dog', 'see'] }
+    ];
+
+    const KITTY_CHAT_STEPS = [
+      {
+        kittyEn: "Meow! ~ Hello Win! 🐱 I am Kitty the Cat! What is your name?",
+        kittyVi: "Meo meo! Chào Win! Tớ là Mèo Con Kitty. Tên của em là gì thế?",
+        suggestions: [
+          { en: "Hello Kitty! I am Win.", vi: "Chào Kitty! Tớ là Win.", emoji: "👋👦" },
+          { en: "My name is Win!", vi: "Tên của tớ là Win!", emoji: "🌟😄" },
+          { en: "Meow! Hi Kitty!", vi: "Meo! Chào bạn mèo Kitty!", emoji: "🐱💛" }
+        ]
+      },
+      {
+        kittyEn: "Purr ~ Nice to meet you, Win! 🐾 Do you like cats or dinosaurs?",
+        kittyVi: "Gừ gừ ~ Vui được gặp Win lắm! Win thích mèo con hay thích khủng long?",
+        suggestions: [
+          { en: "I like cute cats!", vi: "Tớ thích mèo con đáng yêu!", emoji: "🐱❤️" },
+          { en: "I like big dinosaurs!", vi: "Tớ thích khủng long to lớn!", emoji: "🦖🔥" },
+          { en: "I like both cats and dinosaurs!", vi: "Tớ thích cả mèo và khủng long luôn!", emoji: "🐱🦖" }
+        ]
+      },
+      {
+        kittyEn: "Meow! Look at my toy ball ⚽! What colour is your favourite ball, Win?",
+        kittyVi: "Meo! Nhìn quả bóng đồ chơi của tớ này! Win thích bóng màu gì nhất?",
+        suggestions: [
+          { en: "It is red!", vi: "Nó màu đỏ!", emoji: "🔴⚽" },
+          { en: "I like blue balls!", vi: "Tớ thích bóng màu xanh dương!", emoji: "🔵⚽" },
+          { en: "I like yellow like Pikachu!", vi: "Tớ thích màu vàng giống Pikachu!", emoji: "⚡💛" }
+        ]
+      },
+      {
+        kittyEn: "Yay! Let's count the fishes for Kitty: One, Two, Three! 🐟🐟🐟 Can you say One Two Three?",
+        kittyVi: "Hoan hô! Cùng đếm cá cho Mèo Con nào: Một, Hai, Ba! Win nói One Two Three nhé!",
+        suggestions: [
+          { en: "One, two, three fishes!", vi: "Một, hai, ba con cá!", emoji: "🐟🐟🐟" },
+          { en: "Yummy fishes for Kitty!", vi: "Cá ngon cho Mèo Kitty đây!", emoji: "😺🍽️" },
+          { en: "I love you, Kitty!", vi: "Tớ yêu bạn Mèo Kitty!", emoji: "💖🐱" }
+        ]
+      }
+    ];
+
+    const WIN_MATH_5YO = [
+      { id: 1, q: 'Win đếm giúp Mèo Con xem có bao nhiêu chú khủng long đây nhé?', visual: '🦖 🦖 🦖 🦖 🦖', options: ['3', '5', '6'], ans: '5' },
+      { id: 2, q: 'Cầu thủ Win có 3 quả bóng, anh Max tặng thêm 2 quả bóng nữa. Hỏi Win có tất cả mấy quả bóng?', visual: '⚽⚽⚽ ➕ ⚽⚽', options: ['4', '5', '6'], ans: '5' },
+      { id: 3, q: 'Tìm quy luật tiếp theo: Mèo Con 🐱 - Cún Con 🐶 - Mèo Con 🐱 - Cún Con 🐶 - Tiếp theo là gì nhỉ?', visual: '🐱 ➡️ 🐶 ➡️ 🐱 ➡️ 🐶 ➡️ ❓', options: ['🐱', '🐶', '🚀'], ans: '🐱' },
+      { id: 4, q: 'Bên nào NHIỀU HƠN? Bên trái có 6 ngôi sao vũ trụ hay bên phải có 4 tên lửa?', visual: '⭐⭐⭐⭐⭐⭐  🆚  🚀🚀🚀🚀', options: ['⭐⭐⭐⭐⭐⭐ (6 ngôi sao)', '🚀🚀🚀🚀 (4 tên lửa)'], ans: '⭐⭐⭐⭐⭐⭐ (6 ngôi sao)' },
+      { id: 5, q: 'Mèo Kitty có 4 con cá 🐟, Kitty ăn mất 1 con cá. Hỏi còn lại mấy con cá?', visual: '🐟🐟🐟🐟 ➖ 🐟', options: ['2', '3', '4'], ans: '3' },
+      { id: 6, q: 'Win tìm giúp xem hình nào có dạng HÌNH TRÒN giống quả bóng nhé!', visual: '⚽ 🪐 🍕 🧱', options: ['⚽ Quả bóng tròn', '🧱 Viên gạch chữ nhật'], ans: '⚽ Quả bóng tròn' }
+    ];
+
+    const WIN_VIET_5YO = [
+      { id: 1, q: 'Chữ cái đầu tiên trong từ "MÈO CON" là chữ gì hả Win?', visual: '🐱 M - È - O', options: ['Chữ M', 'Chữ B', 'Chữ C'], ans: 'Chữ M', soundText: 'Mờ... Mèo con!' },
+      { id: 2, q: 'Con vật nào bắt đầu bằng chữ "C"?', visual: '🐶 Cún Con   |   🦖 Khủng Long', options: ['🐶 Cún Con', '🦖 Khủng Long'], ans: '🐶 Cún Con', soundText: 'Cờ... Cún con!' },
+      { id: 3, q: 'Đánh vần cùng Win nhé: Bờ - O - Bo - Sắc - BÓNG! Đâu là quả bóng?', visual: '⚽   🚀   🐱', options: ['⚽ Quả bóng', '🚀 Tên lửa', '🐱 Mèo con'], ans: '⚽ Quả bóng', soundText: 'Quả bóng đá!' },
+      { id: 4, q: 'Chữ số hay chữ cái đây nhỉ? Hãy chạm vào chữ "A" in hoa nào!', visual: '🅰️', options: ['Chữ A', 'Chữ O', 'Chữ E'], ans: 'Chữ A', soundText: 'Chữ A!' },
+      { id: 5, q: 'Tiếng "VŨ TRỤ" có hình ảnh nào đúng nhất?', visual: '🪐🚀✨', options: ['🪐 Vũ trụ bao la', '🍎 Quả táo đỏ'], ans: '🪐 Vũ trụ bao la', soundText: 'Vũ trụ bao la!' }
+    ];
+
+    const REWARD_CARDS = [
+      { id: 1, name: 'T-Rex Vua Sân Cỏ', emoji: '🦖⚽', cost: 20, desc: 'Siêu tiền đạo khủng long bạo chúa của Max & Win' },
+      { id: 2, name: 'Mèo Kitty Phi Hành Gia', emoji: '🐱🧑‍🚀', cost: 40, desc: 'Người bạn AI dễ thương bay vào dải ngân hà' },
+      { id: 3, name: 'Siêu Robot Chiến Binh Lego', emoji: '🤖🧱', cost: 60, desc: 'Lắp ghép từ 1.000 viên gạch năng lượng' },
+      { id: 4, name: 'Pikachu Tia Chớp Vàng', emoji: '⚡🐹', cost: 80, desc: 'Thẻ bài huyền thoại tăng gấp đôi năng lượng học tập' },
+      { id: 5, name: 'Cún Con Siêu Anh Hùng', emoji: '🐶🦸‍♂️', cost: 100, desc: 'Bảo vệ Trái Đất và giúp hai anh em đạt 15 Khiên Cambridge' },
+      { id: 6, name: 'Tàu Mẹ Thiên Hà Hihi-Haha', emoji: '🛸🪐', cost: 130, desc: 'Chiến hạm tối thượng của hai anh em Max & Win' }
+    ];
+
+    // ================== MAIN APP COMPONENT ==================
+    function App() {
+      const [profile, setProfile] = useState('MAX'); // 'MAX' | 'WIN' | 'CARDS'
+      const [maxTab, setMaxTab] = useState('EN'); // 'EN' | 'MATH' | 'VIET'
+      const [maxEnSkill, setMaxEnSkill] = useState('VOCAB'); // 'VOCAB' | 'WRITE' | 'SPEAK'
+      const [winTab, setWinTab] = useState('EN'); // 'EN' | 'MATH' | 'VIET'
+      const [winEnMode, setWinEnMode] = useState('KITTY'); // 'TOUCH' | 'SENTENCE' | 'KITTY'
+
+      // Progress State (Saved in LocalStorage)
+      const [stars, setStars] = useState(() => Number(localStorage.getItem('mw_stars')) || 35);
+      const [shields, setShields] = useState(() => Number(localStorage.getItem('mw_shields')) || 8);
+      const [unlockedCards, setUnlockedCards] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('mw_cards')) || [1]; } catch { return [1]; }
+      });
+
+      useEffect(() => { localStorage.setItem('mw_stars', stars); }, [stars]);
+      useEffect(() => { localStorage.setItem('mw_shields', shields); }, [shields]);
+      useEffect(() => { localStorage.setItem('mw_cards', JSON.stringify(unlockedCards)); }, [unlockedCards]);
+
+      // ------- MAX VOCAB LEGO STATE -------
+      const [vocabFilter, setVocabFilter] = useState('ALL');
+      const [vocabIdx, setVocabIdx] = useState(0);
+      const [inputMode, setInputMode] = useState('LEGO'); // 'LEGO' | 'TYPE'
+      const [pickedLetters, setPickedLetters] = useState([]);
+      const [scrambled, setScrambled] = useState([]);
+      const [typedWord, setTypedWord] = useState('');
+      const [vocabFeedback, setVocabFeedback] = useState(null);
+
+      const filteredVocab = MAX_VOCAB_LIST.filter(v => vocabFilter === 'ALL' || v.level === vocabFilter);
+      const currentVocab = filteredVocab[vocabIdx % filteredVocab.length] || MAX_VOCAB_LIST[0];
+
+      useEffect(() => {
+        const letters = currentVocab.word.split('').map((char, i) => ({ char, id: i, used: false }));
+        setScrambled(letters.sort(() => Math.random() - 0.5));
+        setPickedLetters([]);
+        setTypedWord('');
+        setVocabFeedback(null);
+      }, [vocabIdx, vocabFilter]);
+
+      const handlePickLego = (item) => {
+        if (item.used) return;
+        const nextPicked = [...pickedLetters, item];
+        setPickedLetters(nextPicked);
+        setScrambled(scrambled.map(s => s.id === item.id ? { ...s, used: true } : s));
+
+        const formed = nextPicked.map(p => p.char).join('');
+        if (formed.length === currentVocab.word.length) {
+          checkVocabAnswer(formed);
+        }
+      };
+
+      const checkVocabAnswer = (wordStr) => {
+        if (wordStr.toUpperCase().trim() === currentVocab.word) {
+          playEffect('correct');
+          speakText(`${currentVocab.word}! ${currentVocab.sentence}`, 'en-US', 0.9);
+          setStars(s => s + 5);
+          setVocabFeedback({ ok: true, msg: `🎉 Tuyệt đỉnh Max ơi! +5 Sao! "${currentVocab.sentence}"` });
+        } else {
+          playEffect('wrong');
+          setVocabFeedback({ ok: false, msg: `Chưa chính xác rồi, Max thử ghép lại nhé!` });
+        }
+      };
+
+      // ------- MAX WRITING SENTENCE COACH STATE -------
+      const [writeIdx, setWriteIdx] = useState(0);
+      const [userSentence, setUserSentence] = useState('');
+      const [writeReview, setWriteReview] = useState(null);
+      const currentPrompt = MAX_WRITING_PROMPTS[writeIdx % MAX_WRITING_PROMPTS.length];
+
+      const evaluateMaxWriting = () => {
+        const text = userSentence.trim();
+        if (text.length < 5) {
+          setWriteReview({
+            score: 'Cố lên Max!',
+            msg: 'Max hãy viết ít nhất một câu đầy đủ (từ 4 chữ trở lên) mô tả bức tranh nhé!',
+            moverTip: currentPrompt.sampleMover
+          });
+          return;
+        }
+        const words = text.split(/\s+/);
+        const lower = text.toLowerCase();
+        const matchedKeywords = currentPrompt.keywords.filter(k => lower.includes(k));
+        const hasCapital = /^[A-Z]/.test(text);
+        const hasDot = /[.!?]$/.test(text);
+
+        playEffect('correct');
+        setStars(s => s + 10);
+        if (shields < 15) setShields(sh => Math.min(15, sh + 1));
+
+        let praise = `🌟 Great job, Max! Con đã viết được câu dài ${words.length} từ`;
+        if (matchedKeywords.length > 0) {
+          praise += ` và sử dụng rất tốt từ vựng: "${matchedKeywords.join(', ')}"!`;
+        } else {
+          praise += `!`;
+        }
+
+        let grammarNote = [];
+        if (!hasCapital) grammarNote.push('Nhớ viết HOA chữ cái đầu câu nhé.');
+        if (!hasDot) grammarNote.push('Nhớ đặt dấu chấm (.) ở cuối câu nhé.');
+        if (grammarNote.length === 0) grammarNote.push('Chính tả và dấu câu của Max rất chuẩn xác!');
+
+        speakText(`Fantastic work Max! Here is how you can level up to Cambridge Movers: ${currentPrompt.sampleMover}`, 'en-US', 0.92);
+
+        setWriteReview({
+          score: words.length >= 7 ? '🏆 Đạt chuẩn A1 Movers (+1 Khiên 🛡️)' : '⭐ Đạt chuẩn Starters (+1 Khiên 🛡️)',
+          msg: praise,
+          grammar: grammarNote.join(' '),
+          starterTip: currentPrompt.sampleStarter,
+          moverTip: currentPrompt.sampleMover
+        });
+      };
+
+      // ------- MAX SPEAKING & LISTENING STATE -------
+      const [speakSubMode, setSpeakSubMode] = useState('REX'); // 'REX' | 'LISTEN'
+      const [rexIdx, setRexIdx] = useState(0);
+      const [rexInput, setRexInput] = useState('');
+      const [rexReply, setRexReply] = useState(null);
+      const [isRecording, setIsRecording] = useState(false);
+      const [listenIdx, setListenIdx] = useState(0);
+      const [listenFeedback, setListenFeedback] = useState(null);
+
+      const startVoiceCapture = (onResultCallback) => {
+        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRec) {
+          alert('Trình duyệt hiện tại chưa bật nhận diện giọng nói trực tiếp. Bé có thể bấm vào các nút câu mẫu hoặc gõ câu trả lời nhé!');
+          return;
+        }
+        const rec = new SpeechRec();
+        rec.lang = 'en-US';
+        rec.interimResults = false;
+        setIsRecording(true);
+        rec.onresult = (e) => {
+          const transcript = e.results[0][0].transcript;
+          setIsRecording(false);
+          onResultCallback(transcript);
+        };
+        rec.onerror = () => setIsRecording(false);
+        rec.onend = () => setIsRecording(false);
+        rec.start();
+      };
+
+      const handleRexAnswer = (spokenOrTyped) => {
+        const text = (spokenOrTyped || rexInput).trim();
+        if (!text) return;
+        setRexInput(text);
+        playEffect('correct');
+        setStars(s => s + 8);
+        const reply = `Roar! Awesome speaking, Max! You said: "${text}". Your pronunciation and fluency are getting super strong for Cambridge!`;
+        setRexReply(reply);
+        speakText(reply, 'en-US', 0.92);
+      };
+
+      // ------- WIN (5 YO) STATES -------
+      const [winTouchIdx, setWinTouchIdx] = useState(0);
+      const [winTouchMsg, setWinTouchMsg] = useState(null);
+      const [winSentIdx, setWinSentIdx] = useState(0);
+      const [winSentFeedback, setWinSentFeedback] = useState(null);
+      const [kittyIdx, setKittyIdx] = useState(0);
+      const [kittyReply, setKittyReply] = useState(null);
+
+      const currentKitty = KITTY_CHAT_STEPS[kittyIdx % KITTY_CHAT_STEPS.length];
+
+      const handleWinSpeakToKitty = (spokenText) => {
+        playEffect('correct');
+        setStars(s => s + 5);
+        const msg = `Meow! ~ Giỏi quá Win ơi! Mèo Kitty nghe Win nói: "${spokenText}" siêu chuẩn luôn! Thưởng Win 5 ngôi sao nhé!`;
+        setKittyReply(msg);
+        speakText(`Meow! Great job Win! You said ${spokenText}. I love talking with you!`, 'en-US', 0.85);
+      };
+
+      // ------- MATH & VIET STATES (SHARED HELPER) -------
+      const [maxMathIdx, setMaxMathIdx] = useState(0);
+      const [maxMathMsg, setMaxMathMsg] = useState(null);
+      const [maxVietIdx, setMaxVietIdx] = useState(0);
+      const [maxVietMsg, setMaxVietMsg] = useState(null);
+
+      const [winMathIdx, setWinMathIdx] = useState(0);
+      const [winMathMsg, setWinMathMsg] = useState(null);
+      const [winVietIdx, setWinVietIdx] = useState(0);
+      const [winVietMsg, setWinVietMsg] = useState(null);
+
+      return (
+        <div className={`min-h-screen pb-16 transition-colors duration-300 ${
+          profile === 'MAX'
+            ? 'bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white'
+            : profile === 'WIN'
+            ? 'bg-gradient-to-br from-amber-50 via-sky-50 to-emerald-50 text-slate-800'
+            : 'bg-gradient-to-br from-purple-900 via-indigo-900 to-slate-900 text-white'
+        }`}>
+          {/* TOP NAVIGATION BAR */}
+          <header className="sticky top-0 z-30 backdrop-blur-md bg-black/30 border-b border-white/15 px-4 py-3">
+            <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-3">
+              {/* Profile Switcher */}
+              <div className="flex items-center gap-2 bg-black/40 p-1.5 rounded-2xl border border-white/15">
+                <button
+                  onClick={() => setProfile('MAX')}
+                  className={`px-4 py-2 rounded-xl font-extrabold text-sm sm:text-base flex items-center gap-2 transition-all ${
+                    profile === 'MAX'
+                      ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg scale-105'
+                      : 'text-slate-200 hover:bg-white/10'
+                  }`}
+                >
+                  <span>🦖🚀</span>
+                  <span>MAX (Hihi - Lớp 2)</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setProfile('WIN');
+                    speakText('Chào mừng em Win Haha 5 tuổi!', 'vi-VN', 1.0);
+                  }}
+                  className={`px-4 py-2 rounded-xl font-extrabold text-sm sm:text-base flex items-center gap-2 transition-all ${
+                    profile === 'WIN'
+                      ? 'bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 shadow-lg scale-105'
+                      : 'text-slate-200 hover:bg-white/10'
+                  }`}
+                >
+                  <span>🐱⚽</span>
+                  <span>WIN (Haha - 5 Tuổi)</span>
+                </button>
+                <button
+                  onClick={() => setProfile('CARDS')}
+                  className={`px-3 py-2 rounded-xl font-extrabold text-sm sm:text-base flex items-center gap-1.5 transition-all ${
+                    profile === 'CARDS'
+                      ? 'bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-lg scale-105'
+                      : 'text-slate-200 hover:bg-white/10'
+                  }`}
+                >
+                  <span>🃏</span>
+                  <span className="hidden sm:inline">Thẻ Bài</span>
+                </button>
+              </div>
+
+              {/* Score & Cambridge Shields */}
+              <div className="flex items-center gap-3">
+                <div className="bg-amber-400/20 border border-amber-400/50 px-3.5 py-1.5 rounded-xl flex items-center gap-2">
+                  <span className="text-xl">⭐</span>
+                  <span className="font-black text-amber-300 text-lg">{stars}</span>
+                </div>
+                <div className="bg-sky-400/20 border border-sky-400/50 px-3.5 py-1.5 rounded-xl flex items-center gap-2" title="Khiên Cambridge của Max">
+                  <span className="text-xl">🛡️</span>
+                  <span className="font-black text-sky-300 text-sm sm:text-base">{shields}/15 Khiên</span>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          {/* MAIN CONTENT CONTAINER */}
+          <main className="max-w-5xl mx-auto px-4 pt-6">
+
+            {/* =================================================================
+                PROFILE 1: MAX (HIHI) - GRADE 2 (CAMBRIDGE STARTERS -> MOVERS)
+               ================================================================= */}
+            {profile === 'MAX' && (
+              <div className="space-y-6">
+                {/* Banner Max */}
+                <div className="bg-gradient-to-r from-indigo-800/80 via-purple-800/80 to-emerald-800/80 rounded-3xl p-5 border border-white/20 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="text-5xl animate-float">🦖🚀</div>
+                    <div>
+                      <h1 className="text-2xl sm:text-3xl font-black text-white">
+                        Trạm Chỉ Huy Vũ Trụ Của MAX (Hihi)
+                      </h1>
+                      <p className="text-indigo-200 text-sm sm:text-base font-semibold">
+                        Mục tiêu kép: Chinh phục 15/15 Khiên Pre-A1 Starters & Nâng cấp từ vựng A1 Movers!
+                      </p>
+                    </div>
+                  </div>
+                  {/* Shield Progress Bar */}
+                  <div className="w-full sm:w-64 bg-black/40 p-3 rounded-2xl border border-white/10">
+                    <div className="flex justify-between text-xs font-bold mb-1 text-sky-300">
+                      <span>Tiến độ Khiên Cambridge</span>
+                      <span>{shields} / 15 🛡️</span>
+                    </div>
+                    <div className="w-full h-3 bg-slate-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-sky-400 to-emerald-400 transition-all duration-500"
+                        style={{ width: `${(shields / 15) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Subject Tabs for Max */}
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    onClick={() => setMaxTab('EN')}
+                    className={`py-3.5 px-4 rounded-2xl font-black text-base sm:text-lg flex items-center justify-center gap-2 border-2 transition-all ${
+                      maxTab === 'EN'
+                        ? 'bg-emerald-500 border-emerald-300 text-slate-950 shadow-lg'
+                        : 'bg-white/5 border-white/15 text-white hover:bg-white/10'
+                    }`}
+                  >
+                    <span>🇬🇧</span> <span>Tiếng Anh Cambridge</span>
+                  </button>
+                  <button
+                    onClick={() => setMaxTab('MATH')}
+                    className={`py-3.5 px-4 rounded-2xl font-black text-base sm:text-lg flex items-center justify-center gap-2 border-2 transition-all ${
+                      maxTab === 'MATH'
+                        ? 'bg-amber-400 border-amber-200 text-slate-950 shadow-lg'
+                        : 'bg-white/5 border-white/15 text-white hover:bg-white/10'
+                    }`}
+                  >
+                    <span>🧮</span> <span>Toán Tư Duy Lớp 2</span>
+                  </button>
+                  <button
+                    onClick={() => setMaxTab('VIET')}
+                    className={`py-3.5 px-4 rounded-2xl font-black text-base sm:text-lg flex items-center justify-center gap-2 border-2 transition-all ${
+                      maxTab === 'VIET'
+                        ? 'bg-sky-400 border-sky-200 text-slate-950 shadow-lg'
+                        : 'bg-white/5 border-white/15 text-white hover:bg-white/10'
+                    }`}
+                  >
+                    <span>🇻🇳</span> <span>Tiếng Việt Lớp 2</span>
+                  </button>
+                </div>
+
+                {/* MAX - ENGLISH CAMBRIDGE STATION */}
+                {maxTab === 'EN' && (
+                  <div className="bg-slate-800/90 border border-white/15 rounded-3xl p-5 sm:p-6 space-y-6 shadow-2xl">
+                    {/* 3 Sub-skills */}
+                    <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+                      <button
+                        onClick={() => setMaxEnSkill('VOCAB')}
+                        className={`px-4 py-2.5 rounded-xl font-extrabold text-sm sm:text-base transition-all ${
+                          maxEnSkill === 'VOCAB'
+                            ? 'bg-amber-400 text-slate-950 shadow-md'
+                            : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                        }`}
+                      >
+                        🧱 1. Luyện Viết Từ Vựng Lego (Spelling)
+                      </button>
+                      <button
+                        onClick={() => setMaxEnSkill('WRITE')}
+                        className={`px-4 py-2.5 rounded-xl font-extrabold text-sm sm:text-base transition-all ${
+                          maxEnSkill === 'WRITE'
+                            ? 'bg-emerald-400 text-slate-950 shadow-md'
+                            : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                        }`}
+                      >
+                        ✍️ 2. Luyện Viết Câu Cambridge (AI Coach)
+                      </button>
+                      <button
+                        onClick={() => setMaxEnSkill('SPEAK')}
+                        className={`px-4 py-2.5 rounded-xl font-extrabold text-sm sm:text-base transition-all ${
+                          maxEnSkill === 'SPEAK'
+                            ? 'bg-sky-400 text-slate-950 shadow-md'
+                            : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                        }`}
+                      >
+                        🎙️ 3. Nghe & Nói Cùng Khủng Long Rex
+                      </button>
+                    </div>
+
+                    {/* SKILL 1: LEGO SPELLING */}
+                    {maxEnSkill === 'VOCAB' && (
+                      <div className="space-y-5">
+                        <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-900/60 p-3 rounded-2xl">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold uppercase text-slate-400">Cấp độ:</span>
+                            {['ALL', 'Starters', 'Movers'].map(lv => (
+                              <button
+                                key={lv}
+                                onClick={() => { setVocabFilter(lv); setVocabIdx(0); }}
+                                className={`px-3 py-1 rounded-lg text-xs font-black ${
+                                  vocabFilter === lv ? 'bg-indigo-500 text-white' : 'bg-slate-700 text-slate-300'
+                                }`}
+                              >
+                                {lv === 'ALL' ? 'Cả Starters + Movers' : lv}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setInputMode(inputMode === 'LEGO' ? 'TYPE' : 'LEGO')}
+                              className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-xs font-bold"
+                            >
+                              {inputMode === 'LEGO' ? '⌨️ Chuyển sang Tự gõ phím' : '🧱 Chuyển sang Ghép gạch Lego'}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="text-center space-y-3 py-2">
+                          <span className="inline-block px-3 py-1 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                            Chuẩn Cambridge {currentVocab.level}
+                          </span>
+                          <div className="text-7xl sm:text-8xl my-2">{currentVocab.emoji}</div>
+                          <p className="text-lg font-bold text-amber-300">{currentVocab.hintVi}</p>
+                          <button
+                            onClick={() => speakText(currentVocab.word, 'en-US', 0.85)}
+                            className="px-5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-black inline-flex items-center gap-2 shadow-md"
+                          >
+                            🔊 Nghe phát âm từ này
+                          </button>
+                        </div>
+
+                        {inputMode === 'LEGO' ? (
+                          <div className="space-y-5">
+                            {/* Answer Slots */}
+                            <div className="flex justify-center flex-wrap gap-2 min-h-[64px] p-4 rounded-2xl bg-slate-900/90 border-2 border-dashed border-slate-600">
+                              {currentVocab.word.split('').map((_, i) => {
+                                const picked = pickedLetters[i];
+                                return (
+                                  <div
+                                    key={i}
+                                    className={`w-12 h-14 sm:w-14 sm:h-16 rounded-xl flex items-center justify-center text-2xl font-black ${
+                                      picked
+                                        ? 'bg-amber-400 text-slate-950 lego-brick'
+                                        : 'bg-slate-800 border border-slate-600 text-slate-500'
+                                    }`}
+                                  >
+                                    {picked ? picked.char : '_'}
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Scrambled Lego Bricks */}
+                            <div className="flex justify-center flex-wrap gap-3 pt-2">
+                              {scrambled.map((item) => (
+                                <button
+                                  key={item.id}
+                                  disabled={item.used}
+                                  onClick={() => handlePickLego(item)}
+                                  className={`w-14 h-14 sm:w-16 sm:h-16 rounded-xl text-2xl font-black transition-transform active:scale-90 lego-brick ${
+                                    item.used
+                                      ? 'opacity-20 bg-slate-700 cursor-not-allowed'
+                                      : 'bg-rose-500 hover:bg-rose-400 text-white'
+                                  }`}
+                                >
+                                  {item.char}
+                                </button>
+                              ))}
+                            </div>
+
+                            <div className="flex justify-center gap-3">
+                              <button
+                                onClick={() => {
+                                  setPickedLetters([]);
+                                  setScrambled(scrambled.map(s => ({ ...s, used: false })));
+                                  setVocabFeedback(null);
+                                }}
+                                className="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 font-bold text-sm"
+                              >
+                                🔄 Xếp lại
+                              </button>
+                              <button
+                                onClick={() => setVocabIdx(vocabIdx + 1)}
+                                className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm"
+                              >
+                                Từ tiếp theo ➡️
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          /* Keyboard Typing Mode */
+                          <div className="max-w-md mx-auto space-y-3 text-center">
+                            <input
+                              type="text"
+                              value={typedWord}
+                              onChange={(e) => setTypedWord(e.target.value)}
+                              placeholder="Max gõ từ tiếng Anh vào đây..."
+                              className="w-full px-4 py-3.5 rounded-2xl bg-slate-900 border-2 border-sky-400 text-center text-2xl font-black tracking-widest uppercase text-white focus:outline-none"
+                            />
+                            <div className="flex justify-center gap-3">
+                              <button
+                                onClick={() => checkVocabAnswer(typedWord)}
+                                className="px-6 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black"
+                              >
+                                ✅ Kiểm tra Chính Tả
+                              </button>
+                              <button
+                                onClick={() => setVocabIdx(vocabIdx + 1)}
+                                className="px-5 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 font-bold"
+                              >
+                                Từ tiếp theo ➡️
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {vocabFeedback && (
+                          <div className={`p-4 rounded-2xl text-center font-extrabold text-lg ${
+                            vocabFeedback.ok ? 'bg-emerald-500/20 border border-emerald-400 text-emerald-200' : 'bg-rose-500/20 border border-rose-400 text-rose-200'
+                          }`}>
+                            {vocabFeedback.msg}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* SKILL 2: CAMBRIDGE SENTENCE WRITING */}
+                    {maxEnSkill === 'WRITE' && (
+                      <div className="space-y-5">
+                        <div className="bg-slate-900/80 p-5 rounded-2xl border border-white/10 text-center space-y-2">
+                          <span className="text-xs font-black uppercase px-3 py-1 rounded-full bg-purple-500/30 text-purple-200">
+                            Bài luyện số {writeIdx + 1}: {currentPrompt.title}
+                          </span>
+                          <div className="text-6xl sm:text-7xl py-2">{currentPrompt.sceneEmoji}</div>
+                          <p className="text-xl font-black text-amber-300">{currentPrompt.question}</p>
+                          <button
+                            onClick={() => speakText(currentPrompt.question, 'en-US', 0.9)}
+                            className="text-xs font-bold px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20"
+                          >
+                            🔊 Nghe câu hỏi
+                          </button>
+                        </div>
+
+                        {/* Word Bank */}
+                        <div className="space-y-2">
+                          <p className="text-sm font-bold text-slate-300">
+                            💡 Bấm vào các mảnh ghép từ vựng gợi ý bên dưới để thêm nhanh vào câu của Max:
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {currentPrompt.keywords.map((kw, i) => (
+                              <button
+                                key={i}
+                                onClick={() => {
+                                  speakText(kw, 'en-US', 0.9);
+                                  setUserSentence(prev => (prev ? `${prev.trim()} ${kw} ` : `${kw.charAt(0).toUpperCase() + kw.slice(1)} `));
+                                }}
+                                className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-sm shadow"
+                              >
+                                + {kw}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <textarea
+                          rows={3}
+                          value={userSentence}
+                          onChange={(e) => setUserSentence(e.target.value)}
+                          placeholder="Ví dụ: The dinosaur is playing football in the park."
+                          className="w-full p-4 rounded-2xl bg-slate-900 border-2 border-emerald-400/60 text-white text-lg font-bold focus:outline-none"
+                        />
+
+                        <div className="flex flex-wrap gap-3 justify-between items-center">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={evaluateMaxWriting}
+                              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-500 text-slate-950 font-black shadow-lg"
+                            >
+                              ✨ Chấm Bài & Nhận Khiên Cambridge
+                            </button>
+                            <button
+                              onClick={() => { setUserSentence(''); setWriteReview(null); }}
+                              className="px-4 py-3 rounded-2xl bg-slate-700 font-bold text-sm"
+                            >
+                              Xóa viết lại
+                            </button>
+                          </div>
+                          <button
+                            onClick={() => { setWriteIdx(writeIdx + 1); setUserSentence(''); setWriteReview(null); }}
+                            className="px-4 py-3 rounded-2xl bg-amber-400 text-slate-950 font-black text-sm"
+                          >
+                            Tranh tiếp theo ➡️
+                          </button>
+                        </div>
+
+                        {writeReview && (
+                          <div className="bg-emerald-950/80 border-2 border-emerald-400 p-5 rounded-2xl space-y-2">
+                            <div className="text-lg font-black text-amber-300">{writeReview.score}</div>
+                            <p className="font-bold text-white">{writeReview.msg}</p>
+                            {writeReview.grammar && (
+                              <p className="text-sm text-sky-300 font-semibold">📌 Nhận xét ngữ pháp: {writeReview.grammar}</p>
+                            )}
+                            <div className="pt-2 border-t border-white/15 text-sm space-y-1">
+                              <p className="text-slate-300">
+                                ⭐ <b>Câu chuẩn Starters (15 Khiên):</b> <span className="text-emerald-300">{writeReview.starterTip}</span>
+                              </p>
+                              <p className="text-slate-300">
+                                🚀 <b>Câu nâng cấp A1 Movers:</b> <span className="text-amber-300">{writeReview.moverTip}</span>
+                                <button
+                                  onClick={() => speakText(writeReview.moverTip, 'en-US', 0.9)}
+                                  className="ml-2 px-2 py-0.5 rounded bg-white/10 text-xs"
+                                >
+                                  🔊 Nghe
+                                </button>
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* SKILL 3: SPEAKING WITH CAPTAIN REX & LISTENING */}
+                    {maxEnSkill === 'SPEAK' && (
+                      <div className="space-y-5">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setSpeakSubMode('REX')}
+                            className={`px-4 py-2 rounded-xl font-black text-sm ${
+                              speakSubMode === 'REX' ? 'bg-amber-400 text-slate-950' : 'bg-slate-700 text-white'
+                            }`}
+                          >
+                            🦖 Trò Chuyện Cùng Đội Trưởng Rex
+                          </button>
+                          <button
+                            onClick={() => setSpeakSubMode('LISTEN')}
+                            className={`px-4 py-2 rounded-xl font-black text-sm ${
+                              speakSubMode === 'LISTEN' ? 'bg-amber-400 text-slate-950' : 'bg-slate-700 text-white'
+                            }`}
+                          >
+                            🎧 Nghe & Chọn Tranh Đúng (Listening)
+                          </button>
+                        </div>
+
+                        {speakSubMode === 'REX' ? (
+                          <div className="space-y-4 bg-slate-900/80 p-5 rounded-2xl border border-white/10">
+                            <div className="flex items-start gap-4">
+                              <div className="text-5xl">🦖🎙️</div>
+                              <div className="space-y-2 flex-1">
+                                <div className="text-xs font-bold text-emerald-400 uppercase">Captain Rex (Cambridge Speaking Examiner)</div>
+                                <p className="text-lg sm:text-xl font-black text-white">
+                                  "{REX_CONVERSATIONS[rexIdx % REX_CONVERSATIONS.length].q}"
+                                </p>
+                                <button
+                                  onClick={() => speakText(REX_CONVERSATIONS[rexIdx % REX_CONVERSATIONS.length].q, 'en-US', 0.9)}
+                                  className="px-4 py-1.5 rounded-xl bg-sky-500 text-slate-950 font-black text-sm"
+                                >
+                                  🔊 Nghe Rex hỏi
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="bg-indigo-950/60 p-3.5 rounded-xl border border-indigo-400/30 text-sm">
+                              <span className="font-bold text-indigo-300">💡 Gợi ý cho Max: </span>
+                              <span className="text-white font-semibold">{REX_CONVERSATIONS[rexIdx % REX_CONVERSATIONS.length].hint}</span>
+                              <button
+                                onClick={() => speakText(REX_CONVERSATIONS[rexIdx % REX_CONVERSATIONS.length].hint, 'en-US', 0.88)}
+                                className="ml-2 px-2 py-0.5 rounded bg-white/10 text-xs font-bold"
+                              >
+                                🔊 Nghe mẫu
+                              </button>
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row gap-3">
+                              <button
+                                onClick={() => startVoiceCapture((text) => handleRexAnswer(text))}
+                                className={`px-6 py-4 rounded-2xl font-black text-base flex items-center justify-center gap-2 shadow-lg ${
+                                  isRecording
+                                    ? 'bg-rose-500 text-white animate-pulse'
+                                    : 'bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950'
+                                }`}
+                              >
+                                🎙️ {isRecording ? 'Đang nghe Max nói...' : 'BẤM MICRO ĐỂ MAX NÓI'}
+                              </button>
+                              <input
+                                type="text"
+                                value={rexInput}
+                                onChange={(e) => setRexInput(e.target.value)}
+                                placeholder="Hoặc Max gõ câu trả lời tiếng Anh vào đây..."
+                                className="flex-1 px-4 py-3 rounded-2xl bg-slate-800 border border-slate-600 text-white font-bold"
+                              />
+                              <button
+                                onClick={() => handleRexAnswer(rexInput)}
+                                className="px-5 py-3 rounded-2xl bg-emerald-500 text-slate-950 font-black"
+                              >
+                                Gửi
+                              </button>
+                            </div>
+
+                            {rexReply && (
+                              <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-400 text-emerald-200 font-bold">
+                                {rexReply}
+                              </div>
+                            )}
+
+                            <div className="flex justify-end">
+                              <button
+                                onClick={() => { setRexIdx(rexIdx + 1); setRexReply(null); setRexInput(''); }}
+                                className="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-sm font-bold"
+                              >
+                                Câu hỏi Speaking tiếp theo ➡️
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          /* Listening Quiz */
+                          <div className="space-y-4 bg-slate-900/80 p-5 rounded-2xl border border-white/10 text-center">
+                            <p className="text-sm text-slate-300 font-bold">Bấm nút Loa để nghe câu mô tả tiếng Anh rồi chọn đáp án đúng nhé!</p>
+                            <button
+                              onClick={() => speakText(MAX_LISTENING_QUIZ[listenIdx % MAX_LISTENING_QUIZ.length].audioText, 'en-US', 0.85)}
+                              className="px-8 py-4 rounded-2xl bg-sky-400 hover:bg-sky-300 text-slate-950 font-black text-lg shadow-lg"
+                            >
+                              🔊 BẤM ĐỂ NGHE BÀI LISTENING #{listenIdx + 1}
+                            </button>
+                            <p className="text-lg font-extrabold text-amber-300 pt-2">
+                              {MAX_LISTENING_QUIZ[listenIdx % MAX_LISTENING_QUIZ.length].question}
+                            </p>
+                            <div className="grid grid-cols-1 gap-3 max-w-xl mx-auto">
+                              {MAX_LISTENING_QUIZ[listenIdx % MAX_LISTENING_QUIZ.length].options.map((opt, i) => (
+                                <button
+                                  key={i}
+                                  onClick={() => {
+                                    if (opt.correct) {
+                                      playEffect('correct');
+                                      setStars(s => s + 6);
+                                      setListenFeedback({ ok: true, msg: '🎉 Chính xác! Kỹ năng Nghe của Max rất nhạy!' });
+                                    } else {
+                                      playEffect('wrong');
+                                      setListenFeedback({ ok: false, msg: 'Chưa đúng rồi, Max bấm nghe lại một lần nữa nhé!' });
+                                    }
+                                  }}
+                                  className="p-4 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-white/15 font-extrabold text-left text-base"
+                                >
+                                  {opt.text}
+                                </button>
+                              ))}
+                            </div>
+                            {listenFeedback && (
+                              <div className={`p-3 rounded-xl font-bold ${listenFeedback.ok ? 'text-emerald-300' : 'text-rose-300'}`}>
+                                {listenFeedback.msg}
+                              </div>
+                            )}
+                            <button
+                              onClick={() => { setListenIdx(listenIdx + 1); setListenFeedback(null); }}
+                              className="px-5 py-2 rounded-xl bg-amber-400 text-slate-950 font-black text-sm"
+                            >
+                              Bài Nghe tiếp theo ➡️
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* MAX - MATH STATION */}
+                {maxTab === 'MATH' && (
+                  <div className="bg-slate-800/90 border border-white/15 rounded-3xl p-6 space-y-5 shadow-2xl">
+                    <div className="flex justify-between items-center">
+                      <span className="px-3 py-1 rounded-full bg-amber-400/20 text-amber-300 font-black text-xs">
+                        Toán Tư Duy Lớp 2 • Câu {(maxMathIdx % MAX_MATH_LIST.length) + 1}/{MAX_MATH_LIST.length}
+                      </span>
+                      <button
+                        onClick={() => speakText(MAX_MATH_LIST[maxMathIdx % MAX_MATH_LIST.length].q, 'vi-VN', 1.0)}
+                        className="px-3 py-1 rounded-lg bg-white/10 text-xs font-bold"
+                      >
+                        🔊 Đọc đề bài
+                      </button>
+                    </div>
+                    <p className="text-xl sm:text-2xl font-black text-white leading-relaxed">
+                      {MAX_MATH_LIST[maxMathIdx % MAX_MATH_LIST.length].q}
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {MAX_MATH_LIST[maxMathIdx % MAX_MATH_LIST.length].options.map((opt, i) => (
+                        <button
+                          key={i}
+                          onClick={() => {
+                            const cur = MAX_MATH_LIST[maxMathIdx % MAX_MATH_LIST.length];
+                            if (opt === cur.ans) {
+                              playEffect('correct');
+                              setStars(s => s + 6);
+                              setMaxMathMsg({ ok: true, text: `🎉 Chuẩn xác! ${cur.exp}` });
+                            } else {
+                              playEffect('wrong');
+                              setMaxMathMsg({ ok: false, text: 'Chưa đúng rồi, Max tính nhẩm lại một chút nhé!' });
+                            }
+                          }}
+                          className="p-4 rounded-2xl bg-slate-900 hover:bg-indigo-900 border-2 border-white/15 text-lg font-black text-amber-300"
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                    {maxMathMsg && (
+                      <div className={`p-4 rounded-2xl font-bold ${maxMathMsg.ok ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400' : 'bg-rose-500/20 text-rose-200'}`}>
+                        {maxMathMsg.text}
+                      </div>
+                    )}
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => { setMaxMathIdx(maxMathIdx + 1); setMaxMathMsg(null); }}
+                        className="px-6 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-black"
+                      >
+                        Bài Toán tiếp theo ➡️
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* MAX - VIETNAMESE STATION */}
+                {maxTab === 'VIET' && (
+                  <div className="bg-slate-800/90 border border-white/15 rounded-3xl p-6 space-y-5 shadow-2xl">
+                    <span className="px-3 py-1 rounded-full bg-sky-400/20 text-sky-300 font-black text-xs">
+                      Tiếng Việt Lớp 2 • Câu {(maxVietIdx % MAX_VIET_LIST.length) + 1}/{MAX_VIET_LIST.length}
+                    </span>
+                    <p className="text-xl sm:text-2xl font-black text-white">
+                      {MAX_VIET_LIST[maxVietIdx % MAX_VIET_LIST.length].q}
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {MAX_VIET_LIST[maxVietIdx % MAX_VIET_LIST.length].options.map((opt, i) => (
+                        <button
+                          key={i}
+                          onClick={() => {
+                            const cur = MAX_VIET_LIST[maxVietIdx % MAX_VIET_LIST.length];
+                            if (opt === cur.ans) {
+                              playEffect('correct');
+                              setStars(s => s + 6);
+                              setMaxVietMsg({ ok: true, text: `🌟 Đúng rồi! ${cur.exp}` });
+                            } else {
+                              playEffect('wrong');
+                              setMaxVietMsg({ ok: false, text: 'Max đọc kỹ lại nhé!' });
+                            }
+                          }}
+                          className="p-4 rounded-2xl bg-slate-900 hover:bg-sky-900 border-2 border-white/15 text-lg font-black text-white text-left"
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                    {maxVietMsg && (
+                      <div className={`p-4 rounded-2xl font-bold ${maxVietMsg.ok ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400' : 'bg-rose-500/20 text-rose-200'}`}>
+                        {maxVietMsg.text}
+                      </div>
+                    )}
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => { setMaxVietIdx(maxVietIdx + 1); setMaxVietMsg(null); }}
+                        className="px-6 py-2.5 rounded-xl bg-sky-400 text-slate-950 font-black"
+                      >
+                        Câu tiếp theo ➡️
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* =================================================================
+                PROFILE 2: WIN (HAHA) - 5 YEARS OLD (PRESCHOOL + KITTY CAT AI)
+               ================================================================= */}
+            {profile === 'WIN' && (
+              <div className="space-y-6">
+                {/* Banner Win */}
+                <div className="bg-gradient-to-r from-amber-400 via-orange-400 to-pink-400 rounded-3xl p-5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-950">
+                  <div className="flex items-center gap-4">
+                    <div className="text-6xl animate-float">🐱⚽🦖</div>
+                    <div>
+                      <h1 className="text-2xl sm:text-3xl font-black">
+                        Công Viên Siêu Nhí Của WIN (Haha - 5 Tuổi)
+                      </h1>
+                      <p className="font-extrabold text-slate-900/80">
+                        Bấm vào Loa 🔊 để nghe đọc to & Trò chuyện tiếng Anh cùng Mèo Con Kitty!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Subject Tabs for Win */}
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    onClick={() => setWinTab('EN')}
+                    className={`py-4 px-3 rounded-3xl font-black text-base sm:text-xl flex flex-col sm:flex-row items-center justify-center gap-2 border-4 transition-all ${
+                      winTab === 'EN'
+                        ? 'bg-pink-500 border-pink-300 text-white shadow-xl scale-105'
+                        : 'bg-white border-pink-200 text-slate-800'
+                    }`}
+                  >
+                    <span className="text-2xl">🐱🇬🇧</span> <span>Tiếng Anh & Mèo AI</span>
+                  </button>
+                  <button
+                    onClick={() => setWinTab('MATH')}
+                    className={`py-4 px-3 rounded-3xl font-black text-base sm:text-xl flex flex-col sm:flex-row items-center justify-center gap-2 border-4 transition-all ${
+                      winTab === 'MATH'
+                        ? 'bg-amber-400 border-amber-200 text-slate-950 shadow-xl scale-105'
+                        : 'bg-white border-amber-200 text-slate-800'
+                    }`}
+                  >
+                    <span className="text-2xl">🦖🔢</span> <span>Toán Đếm Số</span>
+                  </button>
+                  <button
+                    onClick={() => setWinTab('VIET')}
+                    className={`py-4 px-3 rounded-3xl font-black text-base sm:text-xl flex flex-col sm:flex-row items-center justify-center gap-2 border-4 transition-all ${
+                      winTab === 'VIET'
+                        ? 'bg-emerald-500 border-emerald-300 text-white shadow-xl scale-105'
+                        : 'bg-white border-emerald-200 text-slate-800'
+                    }`}
+                  >
+                    <span className="text-2xl">🅰️🇻🇳</span> <span>Chữ Cái Tiếng Việt</span>
+                  </button>
+                </div>
+
+                {/* WIN - ENGLISH & KITTY AI */}
+                {winTab === 'EN' && (
+                  <div className="bg-white rounded-3xl p-5 sm:p-6 border-4 border-pink-200 shadow-xl space-y-6">
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      <button
+                        onClick={() => setWinEnMode('KITTY')}
+                        className={`px-5 py-3 rounded-2xl font-black text-base sm:text-lg ${
+                          winEnMode === 'KITTY'
+                            ? 'bg-pink-500 text-white shadow-lg'
+                            : 'bg-pink-100 text-pink-900'
+                        }`}
+                      >
+                        🐱 1. Nói Chuyện Cùng Mèo Con AI (Kitty)
+                      </button>
+                      <button
+                        onClick={() => setWinEnMode('SENTENCE')}
+                        className={`px-5 py-3 rounded-2xl font-black text-base sm:text-lg ${
+                          winEnMode === 'SENTENCE'
+                            ? 'bg-amber-400 text-slate-950 shadow-lg'
+                            : 'bg-amber-100 text-amber-900'
+                        }`}
+                      >
+                        🗣️ 2. Luyện Mẫu Câu 5 Tuổi
+                      </button>
+                      <button
+                        onClick={() => setWinEnMode('TOUCH')}
+                        className={`px-5 py-3 rounded-2xl font-black text-base sm:text-lg ${
+                          winEnMode === 'TOUCH'
+                            ? 'bg-sky-500 text-white shadow-lg'
+                            : 'bg-sky-100 text-sky-900'
+                        }`}
+                      >
+                        🎧 3. Nghe & Chạm Hình
+                      </button>
+                    </div>
+
+                    {/* MODE 1: TALK WITH KITTY THE CAT AI */}
+                    {winEnMode === 'KITTY' && (
+                      <div className="space-y-5 bg-gradient-to-b from-pink-50 to-amber-50 p-5 rounded-3xl border-2 border-pink-200">
+                        <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
+                          <div className="text-7xl animate-bounce">🐱💖</div>
+                          <div className="space-y-2 flex-1">
+                            <span className="px-3 py-1 rounded-full bg-pink-500 text-white font-black text-xs uppercase">
+                              Bạn Mèo Con Kitty AI của Win
+                            </span>
+                            <p className="text-2xl font-black text-slate-900">
+                              "{currentKitty.kittyEn}"
+                            </p>
+                            <p className="text-base font-bold text-pink-700">
+                              ({currentKitty.kittyVi})
+                            </p>
+                            <div className="flex flex-wrap gap-2 justify-center sm:justify-start pt-1">
+                              <button
+                                onClick={() => speakText(currentKitty.kittyEn, 'en-US', 0.8)}
+                                className="px-5 py-2.5 rounded-2xl bg-pink-500 hover:bg-pink-400 text-white font-black shadow"
+                              >
+                                🔊 Nghe Mèo Kitty nói tiếng Anh
+                              </button>
+                              <button
+                                onClick={() => speakText(currentKitty.kittyVi, 'vi-VN', 1.0)}
+                                className="px-4 py-2.5 rounded-2xl bg-amber-300 text-slate-900 font-black"
+                              >
+                                🇻🇳 Nghe dịch tiếng Việt
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Big Microphone Button for Win */}
+                        <div className="text-center py-2">
+                          <button
+                            onClick={() => startVoiceCapture((text) => handleWinSpeakToKitty(text))}
+                            className={`px-8 py-5 rounded-3xl font-black text-xl sm:text-2xl shadow-xl inline-flex items-center gap-3 transition-transform active:scale-95 ${
+                              isRecording
+                                ? 'bg-rose-500 text-white animate-pulse'
+                                : 'bg-gradient-to-r from-emerald-400 to-teal-500 text-white'
+                            }`}
+                          >
+                            <span className="text-3xl">🎙️</span>
+                            <span>{isRecording ? 'Mèo Kitty đang nghe Win...' : 'BẤM ĐỂ WIN NÓI VỚI MÈO KITTY'}</span>
+                          </button>
+                        </div>
+
+                        {/* Visual Suggestion Cards for 5yo */}
+                        <div className="space-y-2">
+                          <p className="text-center font-extrabold text-slate-700">
+                            👇 Hoặc Win bấm nghe câu gợi ý rồi bấm chọn để trả lời Mèo Con nhé:
+                          </p>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            {currentKitty.suggestions.map((sug, i) => (
+                              <div
+                                key={i}
+                                className="bg-white p-4 rounded-2xl border-2 border-pink-200 shadow flex flex-col justify-between gap-3 text-center"
+                              >
+                                <div className="text-4xl">{sug.emoji}</div>
+                                <div className="font-black text-lg text-slate-900">"{sug.en}"</div>
+                                <div className="text-xs font-bold text-slate-500">{sug.vi}</div>
+                                <div className="flex gap-2 justify-center">
+                                  <button
+                                    onClick={() => speakText(sug.en, 'en-US', 0.8)}
+                                    className="px-3 py-2 rounded-xl bg-sky-100 text-sky-900 font-black text-sm"
+                                  >
+                                    🔊 Nghe mẫu
+                                  </button>
+                                  <button
+                                    onClick={() => handleWinSpeakToKitty(sug.en)}
+                                    className="px-3 py-2 rounded-xl bg-pink-500 text-white font-black text-sm"
+                                  >
+                                    🗣️ Chọn nói câu này
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {kittyReply && (
+                          <div className="p-4 rounded-2xl bg-emerald-100 border-2 border-emerald-400 text-emerald-950 font-black text-center text-lg">
+                            {kittyReply}
+                          </div>
+                        )}
+
+                        <div className="flex justify-center">
+                          <button
+                            onClick={() => { setKittyIdx(kittyIdx + 1); setKittyReply(null); }}
+                            className="px-6 py-3 rounded-2xl bg-amber-400 text-slate-950 font-black text-base shadow"
+                          >
+                            🐾 Câu trò chuyện tiếp theo cùng Mèo Kitty ➡️
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* MODE 2: 5YO SENTENCE PRACTICE */}
+                    {winEnMode === 'SENTENCE' && (
+                      <div className="text-center space-y-5 py-3">
+                        <div className="text-7xl">{WIN_SENTENCES_5YO[winSentIdx % WIN_SENTENCES_5YO.length].emoji}</div>
+                        <h3 className="text-3xl font-black text-slate-900">
+                          "{WIN_SENTENCES_5YO[winSentIdx % WIN_SENTENCES_5YO.length].en}"
+                        </h3>
+                        <p className="text-lg font-bold text-slate-600">
+                          ({WIN_SENTENCES_5YO[winSentIdx % WIN_SENTENCES_5YO.length].vi})
+                        </p>
+                        <div className="flex justify-center gap-3 flex-wrap">
+                          <button
+                            onClick={() => speakText(WIN_SENTENCES_5YO[winSentIdx % WIN_SENTENCES_5YO.length].en, 'en-US', 0.78)}
+                            className="px-6 py-4 rounded-2xl bg-sky-500 text-white font-black text-lg shadow-lg"
+                          >
+                            🔊 1. Nghe Đọc Mẫu Chậm
+                          </button>
+                          <button
+                            onClick={() =>
+                              startVoiceCapture((spoken) => {
+                                playEffect('correct');
+                                setStars(s => s + 5);
+                                setWinSentFeedback(`🌟 Giỏi lắm Win ơi! Con vừa nói: "${spoken}" (+5 Sao)`);
+                              })
+                            }
+                            className="px-6 py-4 rounded-2xl bg-emerald-500 text-white font-black text-lg shadow-lg"
+                          >
+                            🎙️ 2. Bấm Micro Để Win Nói Theo
+                          </button>
+                          <button
+                            onClick={() => {
+                              playEffect('correct');
+                              setStars(s => s + 5);
+                              speakText('Good job Win!', 'en-US', 0.9);
+                              setWinSentFeedback('🌟 Tuyệt vời! Win đã đọc to câu tiếng Anh rất giỏi (+5 Sao)!');
+                            }}
+                            className="px-5 py-4 rounded-2xl bg-amber-400 text-slate-950 font-black text-lg shadow-lg"
+                          >
+                            ✅ Win Đã Đọc To Xong!
+                          </button>
+                        </div>
+                        {winSentFeedback && (
+                          <div className="p-4 rounded-2xl bg-emerald-100 text-emerald-900 font-black text-lg">
+                            {winSentFeedback}
+                          </div>
+                        )}
+                        <div>
+                          <button
+                            onClick={() => { setWinSentIdx(winSentIdx + 1); setWinSentFeedback(null); }}
+                            className="px-6 py-3 rounded-2xl bg-slate-800 text-white font-black"
+                          >
+                            Mẫu câu tiếp theo ➡️
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* MODE 3: LISTEN & TOUCH FOR WIN */}
+                    {winEnMode === 'TOUCH' && (
+                      <div className="text-center space-y-5 py-3">
+                        <button
+                          onClick={() => speakText(WIN_VOCAB_TOUCH[winTouchIdx % WIN_VOCAB_TOUCH.length].word, 'en-US', 0.8)}
+                          className="px-8 py-5 rounded-3xl bg-sky-500 text-white font-black text-2xl shadow-xl"
+                        >
+                          🔊 Bấm Nghe Từ: "{WIN_VOCAB_TOUCH[winTouchIdx % WIN_VOCAB_TOUCH.length].word}"
+                        </button>
+                        <p className="font-bold text-slate-600">
+                          ({WIN_VOCAB_TOUCH[winTouchIdx % WIN_VOCAB_TOUCH.length].vi})
+                        </p>
+                        <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
+                          {WIN_VOCAB_TOUCH[winTouchIdx % WIN_VOCAB_TOUCH.length].choices.map((emo, i) => (
+                            <button
+                              key={i}
+                              onClick={() => {
+                                const cur = WIN_VOCAB_TOUCH[winTouchIdx % WIN_VOCAB_TOUCH.length];
+                                if (emo === cur.emoji) {
+                                  playEffect('correct');
+                                  speakText(`Yes! ${cur.word}!`, 'en-US', 0.9);
+                                  setStars(s => s + 5);
+                                  setWinTouchMsg('🎉 Đúng rồi Win ơi! +5 Sao!');
+                                } else {
+                                  playEffect('wrong');
+                                  setWinTouchMsg('Chưa đúng rồi, Win chạm hình khác nhé!');
+                                }
+                              }}
+                              className="p-6 rounded-3xl bg-amber-50 hover:bg-amber-100 border-4 border-amber-300 text-6xl sm:text-7xl shadow-md"
+                            >
+                              {emo}
+                            </button>
+                          ))}
+                        </div>
+                        {winTouchMsg && (
+                          <div className="text-xl font-black text-emerald-700">{winTouchMsg}</div>
+                        )}
+                        <button
+                          onClick={() => { setWinTouchIdx(winTouchIdx + 1); setWinTouchMsg(null); }}
+                          className="px-6 py-3 rounded-2xl bg-pink-500 text-white font-black"
+                        >
+                          Hình tiếp theo ➡️
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* WIN - MATH 5YO */}
+                {winTab === 'MATH' && (
+                  <div className="bg-white rounded-3xl p-6 border-4 border-amber-300 shadow-xl text-center space-y-5">
+                    <button
+                      onClick={() => speakText(WIN_MATH_5YO[winMathIdx % WIN_MATH_5YO.length].q, 'vi-VN', 1.0)}
+                      className="px-6 py-3 rounded-2xl bg-amber-400 text-slate-950 font-black text-lg shadow"
+                    >
+                      🔊 Bấm Nghe Câu Hỏi Toán
+                    </button>
+                    <p className="text-2xl font-black text-slate-900">
+                      {WIN_MATH_5YO[winMathIdx % WIN_MATH_5YO.length].q}
+                    </p>
+                    <div className="text-5xl sm:text-6xl py-4 bg-amber-50 rounded-3xl border-2 border-amber-200">
+                      {WIN_MATH_5YO[winMathIdx % WIN_MATH_5YO.length].visual}
+                    </div>
+                    <div className="flex flex-wrap justify-center gap-4">
+                      {WIN_MATH_5YO[winMathIdx % WIN_MATH_5YO.length].options.map((opt, i) => (
+                        <button
+                          key={i}
+                          onClick={() => {
+                            const cur = WIN_MATH_5YO[winMathIdx % WIN_MATH_5YO.length];
+                            if (opt === cur.ans) {
+                              playEffect('correct');
+                              speakText('Hoan hô Win trả lời đúng rồi!', 'vi-VN', 1.0);
+                              setStars(s => s + 5);
+                              setWinMathMsg('🎉 Hoan hô Win giỏi quá! +5 Sao!');
+                            } else {
+                              playEffect('wrong');
+                              setWinMathMsg('Win đếm lại cùng Mèo Con nhé!');
+                            }
+                          }}
+                          className="px-8 py-5 rounded-3xl bg-sky-500 hover:bg-sky-400 text-white font-black text-2xl sm:text-3xl shadow-lg"
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                    {winMathMsg && <div className="text-xl font-black text-emerald-600">{winMathMsg}</div>}
+                    <div>
+                      <button
+                        onClick={() => { setWinMathIdx(winMathIdx + 1); setWinMathMsg(null); }}
+                        className="px-6 py-3 rounded-2xl bg-slate-800 text-white font-black"
+                      >
+                        Bài tiếp theo ➡️
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* WIN - VIETNAMESE 5YO */}
+                {winTab === 'VIET' && (
+                  <div className="bg-white rounded-3xl p-6 border-4 border-emerald-300 shadow-xl text-center space-y-5">
+                    <button
+                      onClick={() => speakText(WIN_VIET_5YO[winVietIdx % WIN_VIET_5YO.length].q, 'vi-VN', 1.0)}
+                      className="px-6 py-3 rounded-2xl bg-emerald-500 text-white font-black text-lg shadow"
+                    >
+                      🔊 Bấm Nghe Câu Hỏi Chữ Cái
+                    </button>
+                    <p className="text-2xl font-black text-slate-900">
+                      {WIN_VIET_5YO[winVietIdx % WIN_VIET_5YO.length].q}
+                    </p>
+                    <div className="text-5xl sm:text-6xl py-4 bg-emerald-50 rounded-3xl border-2 border-emerald-200 font-black">
+                      {WIN_VIET_5YO[winVietIdx % WIN_VIET_5YO.length].visual}
+                    </div>
+                    <div className="flex flex-wrap justify-center gap-4">
+                      {WIN_VIET_5YO[winVietIdx % WIN_VIET_5YO.length].options.map((opt, i) => (
+                        <button
+                          key={i}
+                          onClick={() => {
+                            const cur = WIN_VIET_5YO[winVietIdx % WIN_VIET_5YO.length];
+                            if (opt === cur.ans) {
+                              playEffect('correct');
+                              speakText(cur.soundText, 'vi-VN', 1.0);
+                              setStars(s => s + 5);
+                              setWinVietMsg('🌟 Đúng rồi Win ơi! +5 Sao!');
+                            } else {
+                              playEffect('wrong');
+                              setWinVietMsg('Thử lại nhé Win ơi!');
+                            }
+                          }}
+                          className="px-7 py-5 rounded-3xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xl sm:text-2xl shadow-lg"
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                    {winVietMsg && <div className="text-xl font-black text-emerald-600">{winVietMsg}</div>}
+                    <div>
+                      <button
+                        onClick={() => { setWinVietIdx(winVietIdx + 1); setWinVietMsg(null); }}
+                        className="px-6 py-3 rounded-2xl bg-slate-800 text-white font-black"
+                      >
+                        Chữ tiếp theo ➡️
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* =================================================================
+                SHARED REWARD CARDS COLLECTION (MAX & WIN)
+               ================================================================= */}
+            {profile === 'CARDS' && (
+              <div className="space-y-6">
+                <div className="text-center space-y-2">
+                  <h2 className="text-3xl font-black text-amber-300">
+                    🏆 Bộ Sưu Tập Thẻ Siêu Cấp Của Anh Em MAX & WIN
+                  </h2>
+                  <p className="text-slate-200 font-bold">
+                    Dùng Sao ⭐ tích lũy được khi làm bài để mở khóa các siêu thẻ bài Khủng Long, Mèo Vũ Trụ, Robot Lego & Pokemon!
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {REWARD_CARDS.map((card) => {
+                    const isUnlocked = unlockedCards.includes(card.id);
+                    return (
+                      <div
+                        key={card.id}
+                        className={`p-5 rounded-3xl border-2 flex flex-col justify-between gap-3 text-center transition-all ${
+                          isUnlocked
+                            ? 'bg-gradient-to-b from-indigo-800 to-slate-900 border-amber-400 shadow-xl'
+                            : 'bg-slate-800/50 border-white/10 opacity-80'
+                        }`}
+                      >
+                        <div className="text-6xl py-2">{isUnlocked ? card.emoji : '🔒'}</div>
+                        <h3 className="text-xl font-black text-white">{card.name}</h3>
+                        <p className="text-sm text-slate-300 font-semibold">{card.desc}</p>
+                        {isUnlocked ? (
+                          <span className="px-4 py-2 rounded-xl bg-emerald-500/20 text-emerald-300 font-black text-sm border border-emerald-400/40">
+                            ✅ Đã Mở Khóa
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              if (stars >= card.cost) {
+                                playEffect('correct');
+                                setStars(stars - card.cost);
+                                setUnlockedCards([...unlockedCards, card.id]);
+                              } else {
+                                alert(`Hai anh em cần thêm ${card.cost - stars} Sao ⭐ nữa để mở thẻ này nhé!`);
+                              }
+                            }}
+                            className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm shadow"
+                          >
+                            🔓 Đổi {card.cost} ⭐ để mở
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </main>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
